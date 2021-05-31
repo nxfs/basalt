@@ -22,6 +22,7 @@ pub mod misc;
 pub mod shaders;
 pub mod window;
 pub mod image_view;
+pub mod iml;
 
 use atlas::Atlas;
 use input::Input;
@@ -53,6 +54,7 @@ use vulkano::swapchain::ColorSpace as VkColorSpace;
 use std::str::FromStr;
 use vulkano::command_buffer::CommandBufferUsage;
 use vulkano::image::view::ImageView;
+use iml::{BstIML, IMLInitials};
 
 const SHOW_SWAPCHAIN_WARNINGS: bool = true;
 
@@ -792,6 +794,41 @@ impl Basalt {
 		result_fn: Box<dyn Fn(Result<Arc<Self>, String>) + Send + Sync>,
 	) {
 		Initials::use_first_device(options, result_fn)
+	}
+
+	pub fn initialize_iml(
+		options: Options,
+		result_fn: Box<dyn Fn(Result<(Arc<Self>, Arc<BstIML>), String>) + Send + Sync>,
+	) {
+		Self::initialize(
+			options,
+			Box::new(move |basalt_res| {
+				match basalt_res {
+					Ok(basalt) => match BstIML::new(IMLInitials {
+						basalt: basalt.clone(),
+						window_size: basalt.window_size.lock().clone(),
+						vsync: true
+					}) {
+						Ok(iml) => {
+							let iml_ret = iml.clone();
+
+							*basalt.loop_thread.lock() = Some(
+								thread::spawn(move || {
+									iml.main_loop()
+								})
+							);
+
+							result_fn(Ok((
+								basalt.clone(),
+								iml_ret
+							)));
+						},
+						Err(e) => result_fn(Err(e))
+					},
+					Err(e) => result_fn(Err(e))
+				}
+			})
+		)
 	}
 
 	fn from_initials(initials: Initials) -> Result<Arc<Self>, String> {
