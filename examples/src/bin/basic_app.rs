@@ -13,6 +13,8 @@ fn main() {
 			.ignore_dpi(true)
 			.window_size(300, 300)
 			.title("Basalt")
+			.interface_limit_draw(false) // Limits rendering, may cause issues
+			.app_loop_swapchain_sync(true) // fence/wait after every frame, Nvidia has needed this in the past. Does cost some frame rate, but latency is a bit lower. 
 			.app_loop(),
 		Box::new(move |basalt_res| {
 			let basalt = basalt_res.unwrap();

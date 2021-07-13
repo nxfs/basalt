@@ -28,7 +28,7 @@ use vulkano::image::{
 use vulkano::sampler::Sampler;
 use vulkano::sync::GpuFuture;
 
-const PRINT_UPDATE_TIME: bool = false;
+const PRINT_UPDATE_TIME: bool = true;
 
 #[inline]
 fn srgb_to_linear_d8(v: u8) -> u8 {
@@ -571,15 +571,16 @@ impl Atlas {
 				}
 
 				if execute {
-					drop(
-						cmd_buf
-                            .build()
-                            .unwrap()
-                            .execute(atlas.basalt.compute_queue()) // TODO: Secondary graphics queue
-                            .unwrap()
-                            .then_signal_fence_and_flush()
-                            .unwrap(),
-					);
+					cmd_buf
+						.build()
+						.unwrap()
+						.execute(atlas.basalt.compute_queue()) // TODO: Secondary graphics queue
+						.unwrap()
+						.then_signal_fence_and_flush()
+						.unwrap()
+						.wait(None)
+						.unwrap();
+
 					let mut draw_map = HashMap::new();
 
 					for (i, atlas_image) in atlas_images.iter_mut().enumerate() {
@@ -857,6 +858,7 @@ impl AtlasImage {
 		}
 
 		if found_op.is_none() && self.sto_imgs.len() > 3 {
+			println!("[Basalt]: Atlas image unable to update, all images on lease! Maximum images reached!");
 			return (cmd_buf, false, cur_img_w, cur_img_h);
 		}
 
@@ -891,6 +893,8 @@ impl AtlasImage {
 			.unwrap();
 
 			if img_i < self.sto_imgs.len() {
+				println!("[Basalt]: Atlas Updating Existing Image: {}", img_i);
+
 				// TODO:	This is a workaround for https://github.com/AustinJ235/basalt/issues/6
 				// 			Clearing the whole image is slighly slower than only clearing the parts?
 				// 			Although upload a bunch of zeros the gpu and the copying that onto the
@@ -976,6 +980,8 @@ impl AtlasImage {
 				cur_img_w = min_img_w;
 				cur_img_h = min_img_h;
 			} else {
+				println!("[Basalt]: Atlas Creating Image: {}", img_i);
+
 				cmd_buf.clear_color_image(image.clone(), [0_32; 4].into()).unwrap();
 				self.sto_imgs.push(image.clone());
 				self.con_sub_img.push(Vec::new());
@@ -1018,6 +1024,7 @@ impl AtlasImage {
 
 		if copy_cmds.is_empty() {
 			self.update = None;
+			println!("[Basalt]: Atlas not updating, nothing to do.");
 			return (cmd_buf, false, cur_img_w, cur_img_h);
 		}
 
@@ -1046,6 +1053,7 @@ impl AtlasImage {
 				.unwrap();
 		}
 
+		println!("[Basalt]: Atlas Updated Image: {}", img_i);
 		(cmd_buf, true, cur_img_w, cur_img_h)
 	}
 

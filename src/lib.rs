@@ -64,6 +64,7 @@ pub struct Options {
 	scale: f32,
 	msaa: BstMSAALevel,
 	app_loop: bool,
+	app_loop_swapchain_sync: bool,
 	exclusive_fullscreen: bool,
 	itf_limit_draw: bool,
 	prefer_integrated_gpu: bool,
@@ -129,6 +130,7 @@ impl Default for Options {
 			scale: 1.0,
 			msaa: BstMSAALevel::Four,
 			app_loop: false,
+			app_loop_swapchain_sync: false,
 			itf_limit_draw: false,
 			exclusive_fullscreen: false,
 			prefer_integrated_gpu: false,
@@ -274,6 +276,11 @@ impl Options {
 	/// `MouseMotion` will not be emitted.
 	pub fn force_unix_backend_x11(mut self, to: bool) -> Self {
 		self.force_unix_backend_x11 = to;
+		self
+	}
+	
+	pub fn app_loop_swapchain_sync(mut self, to: bool) -> Self {
+		self.app_loop_swapchain_sync = to;
 		self
 	}
 }
@@ -1522,12 +1529,15 @@ impl Basalt {
 				}
 			};
 
-			let mut min_image_count = current_capabilities.min_image_count;
+			let min_image_count = current_capabilities.min_image_count;
 			let max_image_count = current_capabilities.max_image_count.unwrap_or(0);
+			let mut image_count = min_image_count;
 
 			if max_image_count == 0 || min_image_count + 1 <= max_image_count {
-				min_image_count += 1;
+				image_count = min_image_count + 1;
 			}
+
+			println!("[Basalt]: Swapchain Num Images: {}, Min: {}, Max: {}", image_count, min_image_count, max_image_count);
 
 			swapchain_ = match match swapchain_
 				.as_ref()
@@ -1536,7 +1546,7 @@ impl Basalt {
 				Some(old_swapchain) =>
 					old_swapchain
 						.recreate()
-						.num_images(min_image_count)
+						.num_images(image_count)
 						.format(swapchain_format)
 						.dimensions([x, y])
 						.usage(ImageUsage::color_attachment())
@@ -1547,7 +1557,7 @@ impl Basalt {
 						.build(),
 				None =>
 					Swapchain::start(self.device.clone(), self.surface.clone())
-						.num_images(min_image_count)
+						.num_images(image_count)
 						.format(swapchain_format)
 						.dimensions([x, y])
 						.usage(ImageUsage::color_attachment())
@@ -1737,7 +1747,14 @@ impl Basalt {
 				)
 				.then_signal_fence_and_flush()
 				{
-					Ok(ok) => Some(Box::new(ok)),
+					Ok(ok) => {
+						if self.options.app_loop_swapchain_sync {
+							ok.wait(None).unwrap();
+							None
+						} else {
+							Some(Box::new(ok))
+						}
+					},
 					Err(e) =>
 						match e {
 							vulkano::sync::FlushError::OutOfDate => {
@@ -1761,6 +1778,7 @@ impl Basalt {
 				}
 
 				itf_resize = false;
+
 				if self.wants_exit.load(atomic::Ordering::Relaxed) {
 					break 'resize;
 				}
