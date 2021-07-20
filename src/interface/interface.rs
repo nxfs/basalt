@@ -2,7 +2,7 @@ use crate::interface::bin::Bin;
 use crate::interface::hook::HookManager;
 use crate::interface::odb::OrderedDualBuffer;
 use crate::{Basalt, BstEvent, BstItfEv, BstMSAALevel};
-use ilmenite::{Ilmenite, ImtFillQuality, ImtFont, ImtRasterOpts, ImtSampleQuality, ImtWeight};
+use fontdue::{Font, FontSettings};
 use parking_lot::{Mutex, RwLock};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Weak};
@@ -52,9 +52,9 @@ pub struct Interface {
 	bin_map: Arc<RwLock<BTreeMap<u64, Weak<Bin>>>>,
 	scale: Mutex<f32>,
 	msaa: Mutex<BstMSAALevel>,
-	pub(crate) ilmenite: Arc<Ilmenite>,
 	pub(crate) odb: Arc<OrderedDualBuffer>,
 	pub(crate) hook_manager: Arc<HookManager>,
+	fonts: Vec<Font>,
 }
 
 impl Interface {
@@ -86,23 +86,20 @@ impl Interface {
 		self.basalt.send_event(BstEvent::BstItfEv(BstItfEv::MSAAChanged));
 	}
 
+	pub fn fonts(&self) -> &Vec<Font> {
+		&self.fonts
+	}
+
 	pub(crate) fn new(basalt: Arc<Basalt>) -> Arc<Self> {
 		let bin_map: Arc<RwLock<BTreeMap<u64, Weak<Bin>>>> =
 			Arc::new(RwLock::new(BTreeMap::new()));
-		let ilmenite = Arc::new(Ilmenite::new());
 
-		ilmenite.add_font(
-			ImtFont::from_bytes(
-				"ABeeZee",
-				ImtWeight::Normal,
-				ImtRasterOpts {
-					fill_quality: ImtFillQuality::Normal,
-					sample_quality: ImtSampleQuality::Normal,
-					..ImtRasterOpts::default()
-				},
-				basalt.device(),
-				basalt.compute_queue(),
-				include_bytes!("ABeeZee-Regular.ttf").to_vec(),
+		let mut fonts = Vec::new();
+
+		fonts.push(
+			Font::from_bytes(
+				include_bytes!("ABeeZee-Regular.ttf").as_ref(),
+				FontSettings::default(),
 			)
 			.unwrap(),
 		);
@@ -114,8 +111,8 @@ impl Interface {
 			scale: Mutex::new(basalt.options_ref().scale),
 			msaa: Mutex::new(basalt.options_ref().msaa),
 			hook_manager: HookManager::new(basalt.clone()),
-			ilmenite,
 			basalt,
+			fonts,
 		})
 	}
 

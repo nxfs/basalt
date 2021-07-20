@@ -1,7 +1,8 @@
 use crate::atlas;
 use crate::image_view::BstImageView;
-use ilmenite::{ImtHoriAlign, ImtTextWrap, ImtVertAlign};
 use std::sync::Arc;
+
+use crate::interface::{TextHoriAlign, TextVertAlign, TextWrap};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BinPosition {
@@ -101,9 +102,9 @@ pub struct BinStyle {
 	pub text_height: Option<f32>,
 	pub line_spacing: Option<f32>,
 	pub line_limit: Option<usize>,
-	pub text_wrap: Option<ImtTextWrap>,
-	pub text_vert_align: Option<ImtVertAlign>,
-	pub text_hori_align: Option<ImtHoriAlign>,
+	pub text_wrap: Option<TextWrap>,
+	pub text_vert_align: Option<TextVertAlign>,
+	pub text_hori_align: Option<TextHoriAlign>,
 	pub custom_verts: Vec<BinVert>,
 }
 

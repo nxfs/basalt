@@ -1,7 +1,7 @@
 use super::bin::{Bin, BinPosition, BinStyle, Color, KeepAlive};
 use crate::input::*;
+use crate::interface::TextWrap;
 use crate::Basalt;
-use ilmenite::ImtTextWrap;
 use parking_lot::Mutex;
 use std::sync::atomic::{self, AtomicBool};
 use std::sync::Arc;
@@ -164,7 +164,7 @@ impl Slider {
 			border_color_l: Some(Color::from_hex("808080")),
 			border_color_r: Some(Color::from_hex("808080")),
 			back_color: Some(Color::from_hex("f8f8f8")),
-			text_wrap: Some(ImtTextWrap::None),
+			text_wrap: Some(TextWrap::None),
 			..BinStyle::default()
 		});
 

@@ -8,9 +8,9 @@ use crate::image_view::BstImageView;
 use crate::input::*;
 use crate::interface::hook::{BinHook, BinHookData, BinHookFn, BinHookID};
 use crate::interface::interface::scale_verts;
+use crate::interface::{FontWeight, TextHoriAlign, TextVertAlign, TextWrap};
 use crate::{misc, Basalt};
 use arc_swap::ArcSwapAny;
-use ilmenite::*;
 use ordered_float::OrderedFloat;
 use parking_lot::{Mutex, RwLock};
 use std::collections::BTreeMap;
@@ -44,7 +44,6 @@ pub struct BinUpdateStats {
 	pub t_postset: Duration,
 	pub t_locks: Duration,
 	pub t_text: Duration,
-	pub t_ilmenite: Duration,
 }
 
 impl BinUpdateStats {
@@ -66,7 +65,6 @@ impl BinUpdateStats {
 			t_postset: self.t_postset.div_f32(amt as f32),
 			t_locks: self.t_postset.div_f32(amt as f32),
 			t_text: self.t_text.div_f32(amt as f32),
-			t_ilmenite: self.t_ilmenite.div_f32(amt as f32),
 		}
 	}
 
@@ -92,7 +90,6 @@ impl BinUpdateStats {
 		let mut t_postset = Duration::new(0, 0);
 		let mut t_locks = Duration::new(0, 0);
 		let mut t_text = Duration::new(0, 0);
-		let mut t_ilmenite = Duration::new(0, 0);
 
 		for stat in stats {
 			t_total += stat.t_total;
@@ -111,7 +108,6 @@ impl BinUpdateStats {
 			t_postset += stat.t_postset;
 			t_locks += stat.t_locks;
 			t_text += stat.t_text;
-			t_ilmenite += stat.t_ilmenite;
 		}
 
 		BinUpdateStats {
@@ -131,7 +127,6 @@ impl BinUpdateStats {
 			t_postset,
 			t_locks,
 			t_text,
-			t_ilmenite,
 		}
 	}
 }
@@ -190,14 +185,14 @@ struct BinTextState {
 struct BinTextStyle {
 	scale: f32,
 	text: String,
-	weight: ImtWeight,
+	weight: FontWeight,
 	body_width: f32,
 	body_height: f32,
 	text_height: f32,
 	line_spacing: f32,
-	text_wrap: ImtTextWrap,
-	vert_align: ImtVertAlign,
-	hori_align: ImtHoriAlign,
+	text_wrap: TextWrap,
+	vert_align: TextVertAlign,
+	hori_align: TextHoriAlign,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -2072,9 +2067,9 @@ impl Bin {
 				let mut color = style.text_color.clone().unwrap_or(Color::srgb_hex("000000"));
 				color.a *= opacity;
 				let text_height = style.text_height.clone().unwrap_or(12.0);
-				let text_wrap = style.text_wrap.clone().unwrap_or(ImtTextWrap::NewLine);
-				let vert_align = style.text_vert_align.clone().unwrap_or(ImtVertAlign::Top);
-				let hori_align = style.text_hori_align.clone().unwrap_or(ImtHoriAlign::Left);
+				let text_wrap = style.text_wrap.clone().unwrap_or(TextWrap::NewLine);
+				let vert_align = style.text_vert_align.clone().unwrap_or(TextVertAlign::Top);
+				let hori_align = style.text_hori_align.clone().unwrap_or(TextHoriAlign::Left);
 				let line_spacing = style.line_spacing.clone().unwrap_or(0.0);
 
 				let mut text_state = BinTextState {
@@ -2083,7 +2078,7 @@ impl Bin {
 					style: BinTextStyle {
 						scale,
 						text: style.text.clone(),
-						weight: ImtWeight::Normal,
+						weight: FontWeight::Normal,
 						body_width,
 						body_height,
 						text_height,
@@ -2121,105 +2116,123 @@ impl Bin {
 						}
 					}
 				} else {
-					let glyphs = match self.basalt.interface_ref().ilmenite.glyphs_for_text(
-						"ABeeZee".into(),
-						ImtWeight::Normal,
-						text_height * scale,
-						Some(ImtShapeOpts {
-							body_width,
-							body_height,
-							text_height,
-							line_spacing,
-							text_wrap,
-							vert_align,
-							hori_align,
-							..ImtShapeOpts::default()
-						}),
-						style.text.clone(),
-					) {
-						Ok(ok) => ok,
-						Err(e) => {
-							println!(
-								"[Basalt]: Bin ID: {} | Failed to render text: {:?} | Text: \
-								 \"{}\"",
-								self.id, e, style.text
-							);
-							break;
-						},
+					use fontdue::layout::{
+						CoordinateSystem, Layout, LayoutSettings, TextStyle, WrapStyle,
 					};
 
-					if update_stats {
-						stats.t_ilmenite = inst.elapsed();
-					}
+					let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
+
+					let max_width = match text_wrap {
+						TextWrap::Shift | TextWrap::None | TextWrap::NoneDotted => None,
+						TextWrap::NewLine => Some(body_width),
+					};
+
+					layout.reset(&LayoutSettings {
+						max_width,
+						max_height: Some(body_height),
+						horizontal_align: hori_align.into(),
+						vertical_align: vert_align.into(),
+						wrap_style: WrapStyle::Word,
+						wrap_hard_breaks: true,
+						..LayoutSettings::default()
+					});
+
+					layout.append(
+						self.basalt.interface_ref().fonts().as_slice(),
+						&TextStyle::new(
+							style.text.as_str(),
+							text_height * scale,
+							0, // TODO: Font Family
+						),
+					);
 
 					let cached_coords = self.basalt.atlas_ref().batch_cache_coords(
-						glyphs
+						layout
+							.glyphs()
 							.iter()
 							.map(|glyph| {
 								SubImageCacheID::Glyph(
-									glyph.family.clone(),
-									glyph.weight.clone(),
-									glyph.index,
-									OrderedFloat::from(text_height),
+									String::from("ABeeZee"),
+									FontWeight::Normal,
+									glyph.key.glyph_index,
+									OrderedFloat::from(text_height * scale),
 								)
 							})
 							.collect(),
 					);
 
-					for (glyph, coords_op) in glyphs.into_iter().zip(cached_coords.into_iter())
+					for (glyph, coords_op) in
+						layout.glyphs().iter().zip(cached_coords.into_iter())
 					{
-						let coords = if glyph.w == 0 || glyph.h == 0 || glyph.bitmap.is_none() {
+						if glyph.char_data.is_whitespace()
+							|| glyph.char_data.is_control()
+							|| glyph.char_data.is_missing()
+						{
 							continue;
-						} else {
-							match coords_op {
-								Some(some) => some,
-								None => {
-									let cache_id = SubImageCacheID::Glyph(
-										glyph.family,
-										glyph.weight,
-										glyph.index,
-										OrderedFloat::from(text_height),
-									);
+						}
 
-									self.basalt
-										.atlas_ref()
-										.load_image(
-											cache_id,
-											Image::new(
-												ImageType::LRGBA,
-												ImageDims {
-													w: glyph.w,
-													h: glyph.h,
-												},
-												ImageData::D8(
-													glyph
-														.bitmap
-														.as_ref()
-														.unwrap()
-														.iter()
-														.map(|v| {
-															(*v * u8::max_value() as f32)
-																.round() as u8
-														})
-														.collect(),
-												),
-											)
-											.unwrap(),
-										)
-										.unwrap()
-								},
-							}
+						let (metrics, image_data) = self.basalt.interface_ref().fonts()
+							[glyph.key.font_index]
+							.rasterize_config_subpixel(glyph.key.clone());
+
+						let coords = match coords_op {
+							Some(some) => some,
+							None => {
+								let mut image_data_lrgba: Vec<u8> =
+									Vec::with_capacity((image_data.len() / 3) * 4);
+
+								for chunk in image_data.chunks_exact(3) {
+									if let [r, g, b] = chunk {
+										image_data_lrgba.push(*r);
+										image_data_lrgba.push(*g);
+										image_data_lrgba.push(*b);
+										image_data_lrgba.push(
+											((*r as f32 + *g as f32 + *b as f32) / 3.0).trunc()
+												as u8,
+										);
+									} else {
+										unreachable!()
+									}
+								}
+
+								let cache_id = SubImageCacheID::Glyph(
+									String::from("ABeeZee"),
+									FontWeight::Normal,
+									glyph.key.glyph_index,
+									OrderedFloat::from(text_height * scale),
+								);
+
+								let image = Image::new(
+									ImageType::LRGBA,
+									ImageDims {
+										w: metrics.width as u32,
+										h: metrics.height as u32,
+									},
+									ImageData::D8(image_data_lrgba),
+								)
+								.unwrap();
+
+								self.basalt.atlas_ref().load_image(cache_id, image).unwrap()
+							},
 						};
 
-						let min_x = (glyph.x / scale) + pad_l + bps.tli[0];
-						let min_y = (glyph.y / scale) + pad_t + bps.tli[1];
-						let max_x = min_x + ((glyph.w as f32 - glyph.crop_x) / scale);
-						let max_y = min_y + ((glyph.h as f32 - glyph.crop_y) / scale);
-						let (c_min_x, c_min_y) = coords.top_left();
-						let (mut c_max_x, mut c_max_y) = coords.bottom_right();
+						let line_metrics = self.basalt.interface_ref().fonts()
+							[glyph.key.font_index]
+							.horizontal_line_metrics(text_height * scale)
+							.unwrap();
 
-						c_max_x -= glyph.crop_x;
-						c_max_y -= glyph.crop_y;
+						let w = glyph.width as f32;
+						let h = glyph.height as f32;
+						let x = glyph.x;
+						let y = glyph.y;
+
+						let min_x = (x / scale) + pad_l + bps.tli[0];
+						let min_y = (y / scale) + pad_t + bps.tli[1];
+						let max_x = min_x + w;
+						let max_y = min_y + h;
+
+						let (c_min_x, c_min_y) = coords.top_left();
+						let (c_max_x, c_max_y) = coords.bottom_right();
 
 						let verts =
 							text_state.verts.entry(coords.img_id).or_insert_with(|| Vec::new());

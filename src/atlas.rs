@@ -1,8 +1,8 @@
 use crate::image_view::BstImageView;
+use crate::interface::FontWeight;
 use crate::{misc, Basalt};
 use crossbeam::deque::{Injector, Steal};
 use crossbeam::sync::{Parker, Unparker};
-use ilmenite::ImtWeight;
 use image::{self, GenericImageView};
 use ordered_float::OrderedFloat;
 use parking_lot::{Condvar, Mutex};
@@ -74,7 +74,7 @@ pub type SubImageID = u64;
 pub enum SubImageCacheID {
 	Path(PathBuf),
 	Url(String),
-	Glyph(String, ImtWeight, u16, OrderedFloat<f32>),
+	Glyph(String, FontWeight, u16, OrderedFloat<f32>),
 	None,
 }
 

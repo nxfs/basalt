@@ -5,7 +5,7 @@ pub extern crate vulkano;
 pub extern crate vulkano_shaders;
 extern crate arc_swap;
 extern crate crossbeam;
-pub extern crate ilmenite;
+extern crate fontdue;
 extern crate image;
 extern crate num_cpus;
 extern crate ordered_float;
